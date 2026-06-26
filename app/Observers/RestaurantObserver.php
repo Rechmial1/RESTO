@@ -1,0 +1,253 @@
+<?php
+
+namespace App\Observers;
+
+use App\Models\Package;
+use App\Models\Currency;
+use App\Enums\PackageType;
+use App\Models\Restaurant;
+use App\Models\GlobalInvoice;
+use App\Models\GlobalSubscription;
+use App\Models\NotificationSetting;
+use App\Models\PaymentGatewayCredential;
+use App\Models\GlobalCurrency;
+use App\Models\PredefinedAmount;
+use App\Events\NewRestaurantCreatedEvent;
+
+class RestaurantObserver
+{
+
+    public function saving(Restaurant $restaurant): void
+    {
+        if ($restaurant->isDirty('name')) {
+            $restaurant->hash = $this->createUniqueSlug($restaurant);
+        }
+
+        if (!is_null($restaurant->address)) {
+            $restaurant->address = strip_tags($restaurant->address);
+        }
+
+        if ($restaurant->isDirty(['package_id', 'package_type', 'license_expire_on'])) {
+            clearRestaurantModulesCache($restaurant->id);
+        }
+
+        if ($restaurant->isDirty('package_id')) {
+
+            if (in_array('Sms', restaurant_modules()) && module_enabled('Sms')) {
+
+                $oldPackageId = $restaurant->getOriginal('package_id');
+                $oldPackage   = Package::find($oldPackageId);
+                $newPackage   = Package::find($restaurant->package_id);
+
+                $totalSms = $newPackage?->sms_count ?? 0;
+
+                if ($oldPackage && $newPackage && $oldPackage->sms_count != -1 && $newPackage->sms_count != -1 && $newPackage->carry_forward_sms) {
+                    $remaining = max(0, ($restaurant->getOriginal('total_sms') ?? 0) - ($restaurant->getOriginal('count_sms') ?? 0));
+
+                    $totalSms = $remaining + $newPackage->sms_count;
+                }
+
+                $restaurant->total_sms = $totalSms;
+
+                $restaurant->count_sms = 0;
+            }
+
+            // Update order limits for all branches when package changes
+            $newPackage = Package::find($restaurant->package_id);
+            if ($newPackage) {
+                $orderLimit = $newPackage->order_limit ?? -1;
+                // Update all branches' total_orders and reset count_orders
+                $restaurant->branches->each(function ($branch) use ($orderLimit) {
+                    $branch->total_orders = $orderLimit;
+                    $branch->count_orders = 0;
+                    $branch->saveQuietly();
+                    
+                    // Clear branch order stats cache
+                    cache()->forget('branch_' . $branch->id . '_order_stats');
+                });
+                cache()->forget('restaurant_' . $restaurant->id . '_menu_item_stats');
+                cache()->forget('restaurant_' . $restaurant->id . '_staff_stats');  
+            }
+
+        }
+    }
+
+    public function created(Restaurant $restaurant)
+    {
+        // Set default language for new restaurant
+        $restaurant->update(['customer_site_language' => 'en']);
+
+        // Add Payment Gateway Settings
+        PaymentGatewayCredential::create(['restaurant_id' => $restaurant->id]);
+
+        // Add Currencies
+        $this->addCurrencies($restaurant);
+
+        // Add Notification Settings
+        $this->addNotificationSettings($restaurant);
+
+        // Create Subscription
+        $this->createSubscription($restaurant);
+
+        // Add receipt Settings
+        $restaurant->receiptSetting()->create();
+
+        // Add predefined amounts
+        $this->addPredefinedAmounts($restaurant);
+
+        // Will be used in various module
+        event(new NewRestaurantCreatedEvent($restaurant));
+    }
+
+    private function createSubscription($restaurant)
+    {
+        // Check if a trial package exists and trial status is active (1 or true)
+        $trialPackage = Package::firstWhere('package_type', 'trial');
+        $isTrialActive = $trialPackage && $trialPackage->trial_status == 1;
+
+        // Assign either trial package or default package
+        $package = $isTrialActive ? $trialPackage : Package::firstWhere('package_type', PackageType::DEFAULT);
+
+        // Update restaurant package details
+        $restaurant->update([
+            'package_id' => $package->id,
+            'package_type' => $isTrialActive ? 'trial' : 'monthly',
+            'trial_ends_at' => $isTrialActive ? now()->addDays((int)$trialPackage->trial_days) : null,
+            'license_expire_on' => $isTrialActive ? now()->addDays((int)$trialPackage->trial_days) : now()->addMonth(),
+            'license_updated_at' => now(),
+            'subscription_updated_at' => now(),
+        ]);
+
+        // Create subscription
+        $subscription = GlobalSubscription::create([
+            'restaurant_id' => $restaurant->id,
+            'package_id' => $restaurant->package_id,
+            'currency_id' => $package->currency_id,
+            'package_type' => $restaurant->package_type,
+            'quantity' => 1,
+            'gateway_name' => 'offline',
+            'subscription_status' => 'active',
+            'trial_ends_at' => $isTrialActive ? $restaurant->license_expire_on : null,
+            'subscribed_on_date' => $restaurant->license_updated_at,
+            'ends_at' => $restaurant->license_expire_on,
+            'transaction_id' => strtoupper(str()->random(15)),
+        ]);
+
+        // Create invoice
+        GlobalInvoice::create([
+            'restaurant_id' => $restaurant->id,
+            'global_subscription_id' => $subscription->id,
+            'package_id' => $subscription->package_id,
+            'currency_id' => $subscription->currency_id,
+            'offline_method_id' => null,
+            'package_type' => $subscription->package_type,
+            'total' => 0,
+            'gateway_name' => 'offline',
+            'status' => 'active',
+            'pay_date' => $subscription->subscribed_on_date,
+            'next_pay_date' => $subscription->ends_at,
+            'transaction_id' => $subscription->transaction_id,
+        ]);
+
+        clearRestaurantModulesCache($restaurant->id);
+    }
+
+    public function addCurrencies($restaurant)
+    {
+
+        $globalCurrencies = GlobalCurrency::get();
+
+        foreach ($globalCurrencies as $globalCurrency) {
+            $currency = new Currency();
+            $currency->currency_name = $globalCurrency->currency_name;
+            $currency->currency_symbol = $globalCurrency->currency_symbol;
+            $currency->currency_code = $globalCurrency->currency_code;
+            $currency->restaurant_id = $restaurant->id;
+            $currency->saveQuietly();
+        }
+
+        $defaultCurrency = Currency::where('currency_code', global_setting()->defaultCurrency->currency_code)->where('restaurant_id', $restaurant->id)->first();
+
+        $restaurant->currency_id = $defaultCurrency->id;
+        $restaurant->customer_site_language = 'en';
+
+        $restaurant->save();
+    }
+
+    private function addPredefinedAmounts($restaurant)
+    {
+        $defaultAmounts = [50, 100, 500, 1000];
+
+        foreach ($defaultAmounts as $amount) {
+            PredefinedAmount::create([
+                'restaurant_id' => $restaurant->id,
+                'amount' => $amount,
+            ]);
+        }
+    }
+
+    public function addNotificationSettings($restaurant)
+    {
+        $notificationTypes = [
+            [
+                'type' => 'order_received',
+                'send_email' => 1,
+                'restaurant_id' => $restaurant->id
+            ],
+            [
+                'type' => 'reservation_confirmed',
+                'send_email' => 1,
+                'restaurant_id' => $restaurant->id
+            ],
+            [
+                'type' => 'new_reservation',
+                'send_email' => 1,
+                'restaurant_id' => $restaurant->id
+            ],
+            [
+                'type' => 'order_bill_sent',
+                'send_email' => 1,
+                'restaurant_id' => $restaurant->id
+            ],
+            [
+                'type' => 'staff_welcome',
+                'send_email' => 1,
+                'restaurant_id' => $restaurant->id
+            ]
+        ];
+
+        NotificationSetting::insert($notificationTypes);
+    }
+
+    private function createUniqueSlug($restaurant)
+    {
+        $name = $restaurant->name;
+        // Generate initial slug
+        if (auth()->check()) {
+            $slug = str()->slug($name, '-', auth()->user()->locale);
+        } else {
+            $slug = str()->slug($name, '-');
+        }
+
+        // Fallback if slug is empty or contains only hyphens (happens with non-Latin scripts)
+        if (empty($slug) || trim($slug, '-') === '') {
+            // Use transliteration or fallback to a unique identifier
+            $slug = uniqid();
+        }
+
+        // Check if slug already exists in the database
+        $count = 0;
+        $originalSlug = $slug;
+
+        while (Restaurant::where('hash', $slug)
+            ->where('id', '<>', $restaurant->id)
+            ->exists()
+        ) {
+            // Append counter to make the slug unique
+            $count++;
+            $slug = "{$originalSlug}-{$count}";
+        }
+
+        return $slug;
+    }
+}

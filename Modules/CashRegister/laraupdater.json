@@ -1,0 +1,6 @@
+{
+    "version": "1.0.14",
+    "archive": "tabletrack-cashregister-module-auto-1.0.14.zip",
+    "description": "<ul><li>Close register calculator fix for float values.</li> <li>Dynamic currency symbol in Approvals table.</li></ul>",
+    "release_date": "2025-12-16"
+}
