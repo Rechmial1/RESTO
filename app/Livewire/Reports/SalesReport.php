@@ -399,9 +399,11 @@ class SalesReport extends Component
             DB::raw('SUM(CASE WHEN payments.payment_method = "card" THEN payments.amount ELSE 0 END) as card_amount'),
             DB::raw('SUM(CASE WHEN payments.payment_method = "upi" THEN payments.amount ELSE 0 END) as upi_amount'),
             DB::raw('SUM(CASE WHEN payments.payment_method = "bank_transfer" THEN payments.amount ELSE 0 END) as bank_transfer_amount'),
+            DB::raw('SUM(CASE WHEN payments.payment_method = "mobilemoney" THEN payments.amount ELSE 0 END) as mobilemoney_amount'),
             DB::raw('SUM(CASE WHEN payments.payment_method = "razorpay" THEN payments.amount ELSE 0 END) as razorpay_amount'),
             DB::raw('SUM(CASE WHEN payments.payment_method = "stripe" THEN payments.amount ELSE 0 END) as stripe_amount'),
             DB::raw('SUM(CASE WHEN payments.payment_method = "flutterwave" THEN payments.amount ELSE 0 END) as flutterwave_amount'),
+            DB::raw('SUM(CASE WHEN payments.payment_method = "fedapay" THEN payments.amount ELSE 0 END) as fedapay_amount'),
         )
         ->groupBy('date')
         ->orderBy('date')
@@ -632,7 +634,7 @@ class SalesReport extends Component
                 })
                 ->when($this->filterByWaiter, function ($q) {
                     $q->where('orders.waiter_id', $this->filterByWaiter);
-                })
+                }) 
                 ->select(
                     'taxes.tax_name',
                     'taxes.tax_percent',
@@ -725,9 +727,11 @@ class SalesReport extends Component
                 'cash_amount' => $item->cash_amount ?? 0,
                 'card_amount' => $item->card_amount ?? 0,
                 'upi_amount' => $item->upi_amount ?? 0,
+                'mobilemoney_amount' => $item->mobilemoney_amount ?? 0,
                 'bank_transfer_amount' => $item->bank_transfer_amount ?? 0,
                 'razorpay_amount' => $item->razorpay_amount ?? 0,
                 'stripe_amount' => $item->stripe_amount ?? 0,
+                'fedapay_amount' => $item->fedapay_amount ?? 0,
                 'flutterwave_amount' => $item->flutterwave_amount ?? 0,
                 'outstanding_orders' => $outstandingInfo->outstanding_orders ?? 0,
                 'outstanding_amount' => $outstandingInfo->outstanding_amount ?? 0,
@@ -772,9 +776,13 @@ class SalesReport extends Component
             }
         }
 
-        $paymentGateway = PaymentGatewayCredential::select('stripe_status', 'razorpay_status', 'flutterwave_status')
+    try {
+        $paymentGateway = PaymentGatewayCredential::select('stripe_status', 'razorpay_status', 'flutterwave_status', 'fedapay_status')
             ->where('restaurant_id', restaurant()->id)
             ->first();
+    } catch (\Exception $e) {
+        dd($e->getMessage()); // Affiche l'erreur exacte
+    }
 
         return view('livewire.reports.sales-report', [
             'menuItems' => $groupedData,

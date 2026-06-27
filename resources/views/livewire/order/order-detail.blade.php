@@ -798,19 +798,11 @@
                                                     'bank_transfer' => '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 3 2 8v2h20V8l-10-5Zm-7 9h2v6H5v-6Zm6 0h2v6h-2v-6Zm6 0h2v6h-2v-6ZM3 20h18v1H3v-1Z"/></svg>',
                                                     'due' => '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 1a11 11 0 1 0 11 11A11 11 0 0 0 12 1Zm1 11.41V6h-2v7h6v-2Z"/></svg>',
                                                     'fedapay' => '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" stroke-width="2"/><path d="M8 12h8M8 8h5M8 16h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+                                                    'mobilemoney' => '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" stroke-width="2"/><path d="M8 12h8M8 8h5M8 16h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
                                                 ];
                                             @endphp
 
-                                            @if($canEditPaymentMethod)
-                                                <x-select wire:change="updatePaymentMethod({{ $item->id }}, $event.target.value)"
-                                                    class="w-32 text-sm">
-                                                    @foreach(['cash', 'card', 'upi', 'due', 'bank_transfer'] as $method)
-                                                        <option value="{{ $method }}" @selected($item->payment_method == $method)>
-                                                            @lang('modules.order.' . $method)
-                                                        </option>
-                                                    @endforeach
-                                                </x-select>
-                                            @else
+                                          
                                                 <div @class([
                                                     'inline-flex items-center gap-1 px-2 py-1 rounded text-sm',
                                                     'bg-red-100 text-red-800 dark:bg-red-700 dark:text-red-400 border border-red-400' => $item->payment_method == 'due',
@@ -820,7 +812,7 @@
                                                     {!! $icons[$item->payment_method] ?? '' !!}
                                                     @lang('modules.order.' . $item->payment_method)
                                                 </div>
-                                            @endif
+                                         
 
                                             </div>
                                         </td>

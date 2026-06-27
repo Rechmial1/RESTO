@@ -36,7 +36,8 @@ class AddExpenses extends Component
         'credit_card' => 'modules.expenses.methods.credit_card',
         'debit_card' => 'modules.expenses.methods.debit_card',
         'check' => 'modules.expenses.methods.check',
-        'digital_wallet' => 'modules.expenses.methods.digital_wallet'
+        'digital_wallet' => 'modules.expenses.methods.digital_wallet',
+        'mobile_money' => 'modules.expenses.methods.mobile_money'
     ];
 
     protected $listeners = [

@@ -182,7 +182,9 @@
     @if ($playSound)
     <script>    
         new Audio("{{ asset('sound/new_order.wav')}}").play();
-    </script>
+        // new Audio("{{ asset('sound/lucadialessandro.mp3')}}").play();
+        // new Audio("{{ asset('sound/power.mp3')}}").play();
+    </script> 
     @endif
 
     @script

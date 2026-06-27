@@ -63,7 +63,7 @@
                         </div>
                     </div>
                     <p class="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                        {{ currency_format($menuItems->sum('cash_amount') + $menuItems->sum('card_amount') + $menuItems->sum('upi_amount') + $menuItems->sum('bank_transfer_amount'), $currencyId) }}
+                        {{ currency_format($menuItems->sum('cash_amount') + $menuItems->sum('card_amount') + $menuItems->sum('upi_amount') + $menuItems->sum('bank_transfer_amount') + $menuItems->sum('mobilemoney_amount'), $currencyId) }}
                     </p>
                     <div class="space-y-1.5">
                         @php
@@ -71,7 +71,8 @@
                                 'cash' => $menuItems->sum('cash_amount'),
                                 'card' => $menuItems->sum('card_amount'),
                                 'upi' => $menuItems->sum('upi_amount'),
-                                'bank_transfer' => $menuItems->sum('bank_transfer_amount')
+                                'bank_transfer' => $menuItems->sum('bank_transfer_amount'),
+                                'mobilemoney' => $menuItems->sum('mobilemoney_amount'),
                             ];
                         @endphp
 
@@ -99,7 +100,7 @@
                         </div>
                     </div>
                     <p class="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                        {{ currency_format($menuItems->sum('razorpay_amount') + $menuItems->sum('stripe_amount') + $menuItems->sum('flutterwave_amount'), $currencyId) }}
+                        {{ currency_format($menuItems->sum('razorpay_amount') + $menuItems->sum('stripe_amount') + $menuItems->sum('flutterwave_amount') + $menuItems->sum('fedapay_amount'), $currencyId) }}
                     </p>
                     <div class="space-y-1.5">
                         @php
@@ -115,6 +116,10 @@
                                 'flutterwave' => [
                                     'status' => $paymentGateway->flutterwave_status,
                                     'amount' => $menuItems->sum('flutterwave_amount')
+                                ],
+                                'fedapay' => [
+                                    'status' => $paymentGateway->fedapay_status,
+                                    'amount' => $menuItems->sum('fedapay_amount')
                                 ]
                             ];
                         @endphp
@@ -358,7 +363,7 @@
                 @endif
 
                 <!-- Payment Methods Column Group -->
-                <th colspan="{{ 4 + collect(['stripe', 'razorpay', 'flutterwave'])->filter(fn($method) => isset($paymentGateway) && $paymentGateway->{"{$method}_status"})->count() }}" class="p-4 text-xs font-medium tracking-wider text-center text-gray-600 uppercase dark:text-gray-300 bg-green-50 dark:bg-green-900/20">
+                <th colspan="{{ 5 + collect(['stripe', 'razorpay', 'flutterwave', 'fedapay'])->filter(fn($method) => isset($paymentGateway) && $paymentGateway->{"{$method}_status"})->count() }}" class="p-4 text-xs font-medium tracking-wider text-center text-gray-600 uppercase dark:text-gray-300 bg-green-50 dark:bg-green-900/20">
                     @lang('modules.report.paymentMethods')
                 </th>
 
@@ -386,6 +391,7 @@
             <tr>
                 <th></th>
                 <th></th>
+                
 
                 <!-- Charges Subheaders -->
                 @foreach ($charges as $charge)
@@ -421,9 +427,11 @@
                 <th class=" py-4 text-xs font-medium tracking-wider text-right text-gray-600 uppercase dark:text-gray-300 bg-green-50 dark:bg-green-900/20">
                 @lang('modules.order.bank_transfer')
                 </th>
-                <th class="p-4 text-xs font-medium tracking-wider text-right text-gray-600 uppercase dark:text-gray-300 bg-orange-50 dark:bg-orange-900/20">
 
+                <th class=" py-4 text-xs font-medium tracking-wider text-right text-gray-600 uppercase dark:text-gray-300 bg-green-50 dark:bg-green-900/20">
+                @lang('modules.order.mobilemoney')
                 </th>
+                
                 @if($paymentGateway->razorpay_status)
                 <th class="p-4 text-xs font-medium tracking-wider text-right text-gray-600 uppercase dark:text-gray-300 bg-green-50 dark:bg-green-900/20">
                     @lang('modules.order.razorpay')
@@ -439,6 +447,14 @@
                     @lang('modules.order.flutterwave')
                 </th>
                 @endif
+                @if($paymentGateway->fedapay_status)
+                <th class="p-4 text-xs font-medium tracking-wider text-right text-gray-600 uppercase dark:text-gray-300 bg-green-50 dark:bg-green-900/20">
+                    @lang('modules.order.fedapay')
+                </th>
+                @endif
+                <th class="p-4 text-xs font-medium tracking-wider text-right text-gray-600 uppercase dark:text-gray-300 bg-red-50 dark:bg-red-900/20">
+                    
+                </th>
                 <th></th>
                 <th></th>
                 <th></th>
@@ -488,6 +504,16 @@
                 <td class="px-5 text-sm text-right text-gray-900 dark:text-white bg-green-50/50 dark:bg-green-900/10">
                 {{ currency_format($item['bank_transfer_amount'], $currencyId) }}
                 </td>
+                <td class="px-5 text-sm text-right text-gray-900 dark:text-white bg-green-50/50 dark:bg-green-900/10">
+                {{ currency_format($item['mobilemoney_amount'], $currencyId) }}
+                </td>
+
+
+                @if($paymentGateway->fedapay_status)
+                <td class="p-4 text-sm text-right text-gray-900 dark:text-white bg-green-50/50 dark:bg-green-900/10">
+                    {{ currency_format($item['fedapay_amount'], $currencyId) }}
+                </td>
+                @endif
                 <td class="p-4 text-sm text-right text-gray-900 dark:text-white bg-orange-50/50 dark:bg-orange-900/10">
                     {{ currency_format($item['outstanding_amount'], $currencyId) }}
                 </td>
@@ -506,6 +532,8 @@
                     {{ currency_format($item['flutterwave_amount'], $currencyId) }}
                 </td>
                 @endif
+
+
                 <td class="p-4 text-sm text-right text-gray-900 dark:text-white ">
                     {{ currency_format($item['delivery_fee'], $currencyId) }}
                 </td>
